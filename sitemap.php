@@ -3,9 +3,9 @@
 	** Database Credentials
 	*/
 	// in production this would go in secure config file
-	$server = 'someServer';
-	$user = 'admin';
-	$pass = 'pass';
+	$server = '127.0.0.1';
+	$user = 'root';
+	$pass = '';
 	$db = 'someDB';
 	
 	/*
@@ -16,40 +16,56 @@
 		exit( "Failed to connect to MySQL: (" . $connectDB->connect_errno . ") " . $connectDB->connect_error );
 	}
 	
-	if(!$connectDB->query('Select Distinct(*) From A') = $query) {
+	$query = $connectDB->query('Select Distinct `COL 1` From sometable');
+	if(!$query) {
 		exit( 'Error with query! error: ' . $connectDB->errno . '\n'. $connectDB->error );
 	}
+	$connectDB->close();
 	
 	/*
 	** Hit urls for HTML
 	*/
-	$export; // we'll use this to house the final xml map
-	
-	foreach $query as $url {
-		$html = file_get_contents($url);
+	foreach ($query as $url) {
+		//exit(print_r($url));
+		$hit = curl_init($url['COL 1']);
+		curl_setopt($hit, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($hit, CURLOPT_BINARYTRANSFER, true);
+		$html = curl_exec($hit);
+		curl_close($hit);
+		
+		if($html === false) {
+			exit( 'Curl Error! error: ' . $hit->errno . '\n'. $hit->error );
+		}
 		
 		/*
 		** Parse HTML filtering off domain links
 		*/
-		$links = preg_grep("/(http:\/\/www.foreverbride.com\/)|(https:\/\/www.foreverbride.com\/)/", explode("\n", $$html));
+		$dom = new DOMDocument;
+		libxml_use_internal_errors(true); //suppress html5 warnings
+		$dom->loadHTML($html);
+		$links = [];
+		foreach($dom->getElementsByTagName('a') as $a) {
+			if(!preg_match("/\.(jpg|jpeg|png|gif|css|js)/i", $a->getAttribute("href"))
+				&&preg_match("/^\//", $a->getAttribute("href"))) {
+				array_push($links, $a->getAttribute("href"));
+			}
+		}
 		
 		/*
 		** Build XML
 		*/
-		$xml = new SimpleXMLElement($url);
+		$xml = new SimpleXMLElement('<sitemap></sitemap>');
+		$xml->addChild('BaseURL', $url['COL 1']);
 		$linksTo = $xml->addChild('linksTo');
-		foreach $links as $link {
-			$linksTo->addChild('url', $link)
+		foreach ($links as $link) {
+			$linksTo->addChild('URL', $link);
 		}
-		$export .= $xml;
+	
 	}
 	
 	/*
 	** Do something with the xml
 	*/
-	// can write to file
-	file_put_contents ('mySiteMap.xml', $export);
-	//or echo it out
-	echo $export;
-	//or do whatever you want with it
+	$xml->asXML('mySiteMap.xml');
+	exit('Site Mapped!');
 ?>
